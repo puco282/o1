@@ -62,7 +62,7 @@ def generate_image(prompt):
         st.error(f"예상치 못한 오류가 발생했습니다: {e}. 잠시 후 다시 시도해 주세요.")
         return None
 
-# 모든 GPT 시스템 프롬프트에 공통으로 들어갈 지침
+# 모든 GPT 시스템 프롬프트에 공통으로 들어갈 지침 (이 부분은 전역으로 유지)
 GLOBAL_GPT_DIRECTIVES = (
 """
 **[공통 지침]**
@@ -73,12 +73,12 @@ GLOBAL_GPT_DIRECTIVES = (
 """
 )
 
-# 1. 이야기 점검하기
+# 1. 이야기 점검하기 (이 섹션은 Pika 버전 선택 기능이 없으므로 이전과 동일)
 if chat_option.startswith("1"):
     st.header("1. 이야기 점검하기")
     st.markdown("💬 **목표:** 여러분의 이야기가 영상으로 만들기에 적절한지 GPT와 함께 대화하며 점검하고 다듬어 보세요.")
 
-    # 이야기 점검하기의 시스템 프롬프트 정의 (새로운 지침 반영)
+    # 이야기 점검하기의 시스템 프롬프트 정의
     STORY_REVIEW_SYSTEM_PROMPT = (
         GLOBAL_GPT_DIRECTIVES +
         """
@@ -247,16 +247,6 @@ elif chat_option.startswith("2"):
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
 
-    # '이야기 나누기'에서는 추가적인 사용자 채팅 입력이 필요 없으므로 이 부분을 제거합니다.
-    # 대신, GPT가 한 번에 장면 분할을 완료하도록 유도합니다.
-    # if not st.session_state.segmentation_completed:
-    #      if prompt := st.chat_input("장면 구분에 대해 이야기하거나 수정하고 싶은 부분을 알려주세요."):
-    #           st.session_state.messages_segmentation.append({"role": "user", "content": prompt})
-    #           with st.spinner("GPT가 답변을 생성 중입니다..."):
-    #                gpt_response = ask_gpt(st.session_state.messages_segmentation)
-    #                st.session_state.messages_segmentation.append({"role": "assistant", "content": gpt_response})
-    #                st.rerun()
-
     if st.button("장면 나누기 초기화", key="reset_segmentation_chat"):
         st.session_state.messages_segmentation = [
             {"role": "system", "content": SEGMENTATION_SYSTEM_PROMPT}
@@ -267,22 +257,229 @@ elif chat_option.startswith("2"):
 
 # --- 3. 캐릭터/배경 이미지 생성 프롬프트 구성 ---
 # chat_option 변수가 "3. 캐릭터/배경 이미지 생성"일 때만 이 블록이 실행됩니다.
+elif chat_option.startswith("3"):
+    st.header("3. 캐릭터/배경 이미지 생성")
+    st.markdown("🎨 **목표:** 여러분의 이야기에 등장하는 캐릭터나 배경 이미지를 직접 만들어 볼 수 있어요.")
+
+    # 3번 섹션을 위한 GPT 시스템 프롬프트 (최신 논의 반영)
+    IMAGE_GENERATION_SYSTEM_PROMPT = (
+        GLOBAL_GPT_DIRECTIVES +
+        r"""너는 초등학생이 설명한 캐릭터 또는 배경을 이미지 생성에 적합한 프롬프트로 구체화하는 GPT 도우미야.
+학생의 창의성을 존중하고, 칭찬과 격려의 말투를 꼭 유지해줘.
+
+**[GPT 역할 및 대화 방식]**
+- 학생이 제공한 정보가 아래 항목 중 누락되었거나 불분명하면, **해당 항목에 대한 질문과 함께 적절한 예시를 하나씩 제시**하여 학생이 스스로 더 나은 표현을 찾도록 유도해줘.
+- 반드시 한 번에 하나씩만 질문하고, 학생의 답변을 듣고 다음 질문을 이어가야 해.
+- 전체 질문은 최대 5개 이내로, 이야기의 완성도에 따라 더 적게 해도 좋아.
+- 중복된 질문이나 이미 잘 표현된 요소는 건너뛰어도 돼.
+
+**[질문 대상 항목 및 예시]**
+
+1.  **대상 (가장 먼저 질문)**: "만들고 싶은 이미지가 어떤 대상인가요? 사람 캐릭터, 동물 캐릭터, 아니면 움직이는 물건 같은 건가요?"
+    * **예시:** '용감한 기사 (사람 캐릭터)', '말하는 고양이 (동물 캐릭터)', '움직이는 장난감 로봇 (물건 캐릭터)'
+
+2.  **나이/연령대 (캐릭터가 사람일 경우만 해당)**: "이 캐릭터는 몇 살쯤 되는 것 같아? 아니면 어떤 연령대의 느낌이야?"
+    * **예시:** '10살 여자아이', '고등학생 남자', '친절한 할머니'
+
+3.  **성별 (캐릭터가 사람일 경우만 해당)**: "이 친구는 여자 캐릭터야, 남자 캐릭터야, 아니면 성별을 딱 정하지 않은 중성적인 느낌이야?"
+    * **예시:** '여자', '남자', '중성적인'
+
+4.  **외형 특징**: "캐릭터의 머리 모양, 머리색, 피부색, 눈색, 체형 같은 특별한 특징이 있어? (동물이나 물건이라면 어떤 색깔이나 모양인가요?)"
+    * **예시:** '긴 갈색 머리', '파란 눈의 하얀 피부', '통통한 몸매', '빨간색 털을 가진 고양이', '반짝이는 금속 로봇'
+
+5.  **의상/소품**: "이 캐릭터는 어떤 옷을 입고 있거나 어떤 소품을 가지고 있으면 좋겠어? (동물이나 물건이라면 특징적인 액세서리나 부품이 있나요?)"
+    * **예시:** '노란색 후드티', '낡은 청바지', '빨간색 망토', '마법 지팡이', '낡은 책가방', '작은 탐정 모자를 쓴 고양이'
+
+6.  **표정/감정**: "지금 캐릭터가 어떤 표정을 짓고 있으면 좋을까? 어떤 감정을 보여줬으면 좋겠어?" (배경 없이 캐릭터의 기본 표정)
+    * **예시:** '밝게 웃는 표정', '호기심 가득한 표정', '살짝 찡그린 얼굴'
+
+7.  **스타일/화풍**: "이 그림이 어떤 스타일로 보이면 좋겠어? 만화 같을까, 그림책 같을까?"
+    * **예시:** '디즈니 애니메이션 스타일', '픽사 3D 애니메이션 스타일', '디지털 수채화 느낌', '스누피 펜화 스타일'
+
+**[캐릭터 이미지 생성 규칙 (GPT가 자동으로 적용)]**
+- 무조건 정면을 보고 서 있는 중립적인 자세(standing facing front, neutral pose)를 프롬프트에 자동으로 포함**하여 가장 활용하기 좋게 만들어줘. (단, 동물이나 물건 캐릭터의 경우, '서 있는' 대신 '자연스럽게 놓여 있는' 등 해당 대상에게 적합한 중립적인 상태를 반영해줘.)
+- 학생이 어떤 자세를 언급했든 관계없이, **배경은 없도록(no background)** 프롬프트에 포함해줘.
+- 캐릭터 이미지는 항상 **전신이 보이도록(full-body, head to toe)** 생성해야 해. 대표이미지로서 활용될 수 있게.
+
+**[프롬프트 완성 및 전달]**
+모든 필요한 정보가 수집되면, **DALL-E 모델에 전달할 영어 프롬프트와 함께, 그것의 자연스러운 한국어 번역본을 다음 형식으로 출력해줘. 다른 불필요한 설명은 일절 추가하지 마.**
+
+**DALL-E 프롬프트 (영어):** [여기에 영어 프롬프트 텍스트]
+**한국어 번역:** [여기에 한국어 번역 텍스트]
+
+**예시:**
+**DALL-E 프롬프트 (영어):** A 10-year-old girl, female, with short brown hair and bright blue eyes, wearing a pink dress and holding a small teddy bear, brightly smiling expression, Disney animation style, standing facing front, no background, full body.
+**한국어 번역:** 10살 여자아이, 짧은 갈색 머리와 파란 눈을 가졌고, 분홍색 원피스를 입고 작은 곰인형을 들고 있는 모습. 밝게 웃는 표정. 디즈니 애니메이션 스타일. 정면을 보고 서 있는 전신 이미지. 배경 없음.
+
+**주의사항:** 학생에게 바로 이미지 프롬프트를 제공하지 않고, 질문을 통해 구체화해야 해. 질문은 자연스럽고 흐름에 맞게 진행해줘."""
+    )
+
+    # 세션 상태 초기화 또는 로드
+    # 이 섹션에 들어올 때만 초기화되도록 조건 추가 (이미 다른 섹션에서 세션 상태가 존재할 경우 방지)
+    if "messages_image_generation" not in st.session_state or \
+       st.session_state.messages_image_generation[0]["content"] != IMAGE_GENERATION_SYSTEM_PROMPT:
+        st.session_state.messages_image_generation = [
+            {"role": "system", "content": IMAGE_GENERATION_SYSTEM_PROMPT}
+        ]
+        st.session_state.image_prompt_collected = False
+        st.session_state.generated_image_display = None
+        st.session_state.image_input_submitted = False
+        st.session_state.final_dalle_prompt = "" # 최종 DALL-E 프롬프트 저장용
+        st.session_state.image_generation_disabled = False
+        st.session_state.image_generation_disable_until = 0
+
+    # 캐릭터/배경 선택 라디오 버튼
+    image_type = st.radio("어떤 이미지를 만들고 싶나요?", ["캐릭터 이미지", "배경 이미지"], key="image_type_radio")
+    
+    # 초기 프롬프트 입력창 (첫 제출 전까지 보임)
+    if not st.session_state.image_input_submitted:
+        initial_prompt = st.text_area(f"{image_type}에 대해 설명해주세요. (예: '용감한 기사', '신비로운 숲')", key="initial_image_prompt")
+        if st.button("프롬프트 구체화 시작") and initial_prompt:
+            st.session_state.messages_image_generation.append({"role": "user", "content": initial_prompt})
+            st.session_state.image_input_submitted = True # 스토리 제출 시 이 플래그를 True로 설정
+            with st.spinner("GPT가 질문을 생성 중입니다..."):
+                gpt_response = ask_gpt(st.session_state.messages_image_generation)
+                st.session_state.messages_image_generation.append({"role": "assistant", "content": gpt_response})
+            st.rerun() # 플래그 변경 후 페이지를 새로고침하여 채팅 UI를 표시
+        if not st.session_state.image_input_submitted and initial_prompt:
+              st.info("⬆️ '프롬프트 구체화 시작' 버튼을 눌러 GPT와 대화를 시작하세요!")
+
+
+    # 대화 기록 표시
+    for message in st.session_state.messages_image_generation:
+        if message["role"] != "system":
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
+
+    # 지속적인 채팅 입력창 (초기 프롬프트 제출 후 보임)
+    if st.session_state.image_input_submitted:
+        if current_prompt := st.chat_input("GPT의 질문에 답하거나 설명을 추가해주세요."):
+            st.session_state.messages_image_generation.append({"role": "user", "content": current_prompt})
+            with st.spinner("GPT가 답변을 생성 중입니다..."):
+                gpt_response = ask_gpt(st.session_state.messages_image_generation)
+                st.session_state.messages_image_generation.append({"role": "assistant", "content": gpt_response})
+            st.rerun()
+
+          # GPT의 마지막 메시지에서 '완성된 프롬프트:'를 찾아 추출 (파싱 로직 개선)
+        if st.session_state.messages_image_generation and \
+           st.session_state.messages_image_generation[-1]["role"] == "assistant" and \
+           "DALL-E 프롬프트 (영어):" in st.session_state.messages_image_generation[-1]["content"] and \
+           "한국어 번역:" in st.session_state.messages_image_generation[-1]["content"] and \
+           not st.session_state.messages_image_generation[-1]["content"].strip().endswith("?") and \
+           not st.session_state.image_prompt_collected: # '?'로 끝나는 질문이 아닐 때만 프롬프트로 인식
+            
+            gpt_final_prompt_content = st.session_state.messages_image_generation[-1]["content"]
+            
+            try:
+                # 영어 프롬프트 추출
+                start_english_index = gpt_final_prompt_content.find("DALL-E 프롬프트 (영어):")
+                if start_english_index != -1:
+                    english_prompt_start = start_english_index + len("DALL-E 프롬프트 (영어):")
+                    # '한국어 번역:' 시작 전까지의 내용을 영어 프롬프트로 간주
+                    end_english_index = gpt_final_prompt_content.find("한국어 번역:", english_prompt_start)
+                    if end_english_index == -1: # 한국어 번역이 없을 경우, 끝까지
+                        final_dalle_prompt = gpt_final_prompt_content[english_prompt_start:].strip()
+                    else:
+                        final_dalle_prompt = gpt_final_prompt_content[english_prompt_start:end_english_index].strip()
+                    
+                    # 한국어 번역 추출
+                    start_korean_index = gpt_final_prompt_content.find("한국어 번역:")
+                    if start_korean_index != -1:
+                        korean_translation_start = start_korean_index + len("한국어 번역:")
+                        korean_dalle_prompt = gpt_final_prompt_content[korean_translation_start:].strip()
+                    else:
+                        korean_dalle_prompt = "번역을 가져올 수 없습니다." # 번역이 없을 경우
+
+                    st.session_state.image_prompt_collected = True
+                    st.session_state.final_dalle_prompt = final_dalle_prompt # DALL-E 모델에 전달할 영어 프롬프트
+                    st.session_state.korean_dalle_prompt_display = korean_dalle_prompt # 사용자에게 보여줄 한국어 번역
+
+                    st.info(f"✨ GPT가 최종 이미지 프롬프트를 완성했어요 (DALL-E용): `{final_dalle_prompt}`")
+                    st.success(f"💡 **[한국어 번역]** : {korean_dalle_prompt}")
+                else:
+                    st.session_state.image_prompt_collected = False # 아직 프롬프트 완성 안 됨
+                    st.session_state.final_dalle_prompt = ""
+                    st.session_state.korean_dalle_prompt_display = ""
+            except Exception as e:
+                st.error(f"프롬프트 파싱 중 오류가 발생했습니다: {e}. GPT 응답 형식을 확인해주세요.")
+                st.session_state.image_prompt_collected = False
+                st.session_state.final_dalle_prompt = ""
+                st.session_state.korean_dalle_prompt_display = ""
+
+    # 최종 프롬프트가 수집되었을 때 이미지 생성 버튼 및 이미지 표시
+    # --- 여기서부터 정렬 수정 ---
+    if st.session_state.get("image_prompt_collected", False):
+        # 버튼 활성화 여부 확인
+        is_button_disabled = st.session_state.get("image_generation_disabled", False)
+        if is_button_disabled:
+            # 비활성화 시간 확인
+            remaining_time = int(st.session_state.get("image_generation_disable_until", 0) - time.time())
+            if remaining_time > 0:
+                st.warning(f"⏰ 이미지 생성은 {remaining_time}초 후에 다시 가능합니다. 잠시 기다려주세요.")
+                # 버튼을 비활성화 상태로 렌더링
+                st.button("이미지 생성 중 (잠시 기다려주세요)", disabled=True) 
+            else:
+                # 시간 만료, 버튼 다시 활성화
+                st.session_state.image_generation_disabled = False
+                is_button_disabled = False # 버튼 상태 업데이트
+
+        # 버튼이 활성화된 경우에만 클릭 가능하도록
+        if not is_button_disabled:
+            if st.button("이 프롬프트로 이미지 생성하기"):
+                if st.session_state.get("final_dalle_prompt"):
+                    with st.spinner("이미지를 생성 중입니다... 잠시만 기다려주세요!"):
+                        generated_img = generate_image(st.session_state.final_dalle_prompt) 
+                        if generated_img:
+                            st.session_state.generated_image_display = generated_img
+                            st.success("이미지가 성공적으로 생성되었습니다!")
+                        # 오류 메시지는 generate_image 함수 내에서 이미 표시됨
+                else:
+                    st.warning("먼저 GPT로부터 완성된 이미지 프롬프트를 받아야 합니다.")
+        
+        # 생성된 이미지가 있으면 화면에 표시하고 다운로드 버튼 제공
+        if st.session_state.generated_image_display:
+            st.image(st.session_state.generated_image_display, caption=f"생성된 {image_type} (프롬프트: {st.session_state.korean_dalle_prompt_display})", use_container_width=True)
+            buf = io.BytesIO()
+            st.session_state.generated_image_display.save(buf, format="PNG")
+            byte_im = buf.getvalue()
+            st.download_button(
+                label="이미지 다운로드",
+                data=byte_im,
+                file_name=f"{image_type}_generated.png",
+                mime="image/png"
+            )
+
+    # 대화 초기화 버튼
+    # --- 여기서부터 정렬 수정 ---
+    if st.button("이미지 생성 초기화", key="reset_image_generation_chat"):
+        st.session_state.messages_image_generation = [
+            {"role": "system", "content": IMAGE_GENERATION_SYSTEM_PROMPT} 
+        ]
+        st.session_state.image_prompt_collected = False
+        st.session_state.generated_image_display = None
+        st.session_state.image_input_submitted = False
+        st.session_state.final_dalle_prompt = ""
+        st.session_state.image_generation_disabled = False 
+        st.session_state.image_generation_disable_until = 0 
+        st.rerun()
+
+# 4. 장면별 영상 Prompt 점검 - 설계 반영 (여기에 모든 수정 사항 집중)
 elif chat_option.startswith("4"):
     st.header("4. 장면별 영상 Prompt 점검")
     st.markdown("🎬 **목표:** 각 장면에 맞는 Pika 영상 프롬프트를 만들고, 더 좋은 프롬프트로 다듬어 보세요.")
 
     st.warning("이 기능은 '2. 이야기 나누기'에서 장면 구분이 완료된 후에 사용하는 것이 좋습니다.")
 
-    # --- Pika 버전 선택 UI 시작 ---
+    # --- ✨ Pika 버전 선택 기능 (4번 섹션 내) ✨ ---
     st.subheader("어떤 Pika 버전을 위한 프롬프트를 만드시겠어요?")
     pika_version = st.radio(
         "Pika 2.1은 간단한 애니메이션에, Pika 2.2는 영화 같은 영상에 적합해요.",
         ["Pika 2.1 (간단한 애니메이션)", "Pika 2.2 (영화 같은 영상)"],
-        key="pika_version_selector"
+        key="pika_version_selector_section_4" # 섹션별 고유 키 사용
     )
-    st.info(f"선택: **{pika_version}** 버전 맞춤 프롬프트를 도와드릴게요!")
+    st.info(f"선택: **{pika_version}** 버전에 맞춰 프롬프트를 도와드릴게요!")
     st.markdown("---")
-    # --- Pika 버전 선택 UI 끝 ---
+    # --- Pika 버전 선택 기능 끝 ---
 
     # --- Pika 버전에 따른 시스템 프롬프트 정의 시작 ---
     # Pika 2.1 전용 시스템 프롬프트
@@ -291,7 +488,7 @@ elif chat_option.startswith("4"):
         """너는 초등학생이 작성한 장면 설명을 기반으로, **5초 이내의 GIF 같은 애니메이션 영상**을 Pika 2.1로 만들 수 있도록 프롬프트를 구체적이고 생생하게 개선해주는 GPT 도우미야. 너의 목표는 학생의 아이디어를 **캐릭터의 명확한 행동**을 중심으로 한 Pika 2.1에 최적화된 시각적인 프롬프트로 변환하는 것이야. 컴퓨터는 '푸근한 아줌마'처럼 모호한 표현을 이해하기 어렵다는 것을 학생들이 잘 모른다는 점을 항상 기억하고, 이를 구체적인 시각적 묘사로 바꾸도록 적극적으로 도와줘.
 
 **[GPT 역할 및 대화 방식]**
-- 학생의 프롬프트 초안을 면밀히 검토하고, **모호하거나, 한 장면에 너무 많은 이야기가 담겨있거나, 설명이 부족한 부분이 있다면 구체적으로 지적**해줘.
+- 학생의 프롬프트 초안을 면밀히 검토하고, **모호하거나(예: '좋은 분위기'), 한 장면에 너무 많은 이야기가 담겨있거나, 설명이 부족한 부분이 있다면 구체적으로 지적**해줘.
 - 부족하거나 더 구체화할 수 있는 부분이 있다면 다음 요소들을 중심으로 **최대 3개 이내의 단일 질문**을 통해 정보를 채워나가줘.
 - 반드시 한 번에 하나씩만 질문하고, 학생의 답변을 듣고 다음 질문을 이어가야 해.
 - 전체 질문은 최대 7개 이내로, 대화의 효율성을 중요하게 생각해줘. 중복된 질문이나 이미 잘 표현된 요소는 건너뛰어도 돼.
@@ -385,13 +582,16 @@ elif chat_option.startswith("4"):
 
     # st.session_state 초기화 시 시스템 프롬프트도 다시 로드하도록 조건 추가
     # 선택된 Pika 버전에 따라 시스템 프롬프트가 변경될 경우 대화를 초기화
+    # (Pika 버전 선택 라디오 버튼이 변경되었는지 확인하는 로직 추가)
     if "messages_video_prompt" not in st.session_state or \
-       st.session_state.messages_video_prompt[0]["content"] != current_system_prompt:
+       st.session_state.get("last_pika_version_selected") != pika_version: # 추가된 조건
         st.session_state.messages_video_prompt = [
             {"role": "system", "content": current_system_prompt}
         ]
         st.session_state.current_scene_prompt = ""
         st.session_state.video_prompt_finalized = False 
+        st.session_state.last_pika_version_selected = pika_version # 선택된 버전 저장
+
 
     # --- 입력 칸 구분 명확화 코드 시작 ---
     st.subheader("1단계: 이 장면은 어떤 내용인가요?")
@@ -484,9 +684,11 @@ elif chat_option.startswith("4"):
 
 
     if st.button("프롬프트 점검 초기화", key="reset_video_prompt_chat"):
+        # 초기화 시, 현재 선택된 Pika 버전에 맞는 시스템 프롬프트로 다시 로드
         st.session_state.messages_video_prompt = [
-            {"role": "system", "content": current_system_prompt} # 현재 선택된 시스템 프롬프트로 초기화
+            {"role": "system", "content": current_system_prompt}
         ]
         st.session_state.current_scene_prompt = ""
         st.session_state.video_prompt_finalized = False 
+        # last_pika_version_selected는 라디오 버튼 변경 감지를 위해 유지
         st.rerun()
