@@ -558,7 +558,7 @@ elif chat_option.startswith("4"):
                 st.session_state.messages_video_prompt.append({"role": "assistant", "content": gpt_response})
             st.rerun()
 
-        # GPT가 최종 프롬프트를 제시했는지 확인 (파싱 로직)
+         # GPT가 최종 프롬프트를 제시했는지 확인 (파싱 로직)
         if st.session_state.messages_video_prompt and \
            st.session_state.messages_video_prompt[-1]["role"] == "assistant":
             last_gpt_message = st.session_state.messages_video_prompt[-1]["content"]
@@ -574,30 +574,44 @@ elif chat_option.startswith("4"):
 
                 # 영어 프롬프트 추출
                 start_english_index = last_gpt_message.find("🎬 **Pika AI용 영어 프롬프트:**") + len("🎬 **Pika AI용 영어 프롬프트:**")
-                # 마지막 격려 문구 전까지 추출
-                end_english_index = last_gpt_message.find("이제 이 프롬프트로 멋진 영상을 만들 수 있을 거예요!", start_english_index)
+                # 마지막 격려 문구 전까지 추출 (정확한 시작과 끝을 찾아야 합니다)
+                # '이제 이 프롬프트로' 이전 부분을 찾도록 수정
+                end_english_index = last_gpt_message.find("이제 이 프롬프트로", start_english_index)
                 if end_english_index != -1:
                     english_final_prompt = last_gpt_message[start_english_index:end_english_index].strip()
                 else:
                     english_final_prompt = last_gpt_message[start_english_index:].strip() # 격려 문구가 없을 경우 끝까지
 
-                # **여기서 중요한 변경: 최종 프롬프트가 출력되었더라도, 학생이 '장면 완성!'이라고 명시적으로 말하지 않으면 video_prompt_finalized를 False로 유지하여 계속 수정할 수 있도록 합니다.**
-                # 다만, GPT가 '완성된 영상 프롬프트'를 제공했으므로, 이 시점에서 사용자에게 '완성됐다'고 말할지 물어보는 안내 메시지를 추가할 수 있습니다.
-                st.success("✅ GPT가 새로운 프롬프트 초안을 제안했어요! 마음에 드나요?")
-                st.markdown(f"**최종 한국어 프롬프트:** {korean_final_prompt}")
-                st.markdown(f"**Pika AI용 영어 프롬프트:** `{english_final_prompt}`")
-                st.info("⬆️ 이 프롬프트가 마음에 든다면 **'장면 완성!'** 이라고 말해주세요. 수정하고 싶다면 어떤 부분이 마음에 들지 않는지 구체적으로 설명해주세요.")
+                # 격려 메시지 추출 (선택 사항: GPT가 보내는 격려 메시지도 추출하여 깔끔하게 표시)
+                encouragement_message = ""
+                encouragement_start_index = last_gpt_message.find("이제 이 프롬프트로", end_english_index if end_english_index != -1 else start_english_index)
+                if encouragement_start_index != -1:
+                    encouragement_message = last_gpt_message[encouragement_start_index:].strip()
+
+                st.session_state.video_prompt_finalized = True # 최종 프롬프트 출력 시 플래그를 True로 설정
                 
-            # GPT가 최종 프롬프트 형식을 사용하지 않았고, 질문도 아닌 평범한 대화일 경우 대화 지속
-            # 이 부분은 GPT가 최종 출력 형식으로 응답하지 않았지만, 대화가 계속되어야 하는 경우를 처리합니다.
-            # GPT가 질문을 한 경우 st.chat_input이 계속 보일 것이므로 별도 처리는 불필요합니다.
-            # 중요한 것은, 최종 프롬프트 출력 형식에 도달하기 전까지는 video_prompt_finalized가 False여야 합니다.
+                # --- ✨ 여기부터 디자인 개선 핵심 코드 ✨ ---
+                st.success("🎉 영상 프롬프트 점검이 완료되었어요! 🎉")
+                st.markdown("---") # 구분선 추가
 
+                st.subheader("💡 완성된 영상 프롬프트")
+                st.write(f"**한국어:** {korean_final_prompt}")
+                st.markdown(f"**Pika AI용 영어:** ```{english_final_prompt}```") # 코드 블록으로 강조
 
-    if st.button("프롬프트 점검 초기화", key="reset_video_prompt_chat"):
-        st.session_state.messages_video_prompt = [
-            {"role": "system", "content": VIDEO_PROMPT_REVIEW_SYSTEM_PROMPT}
-        ]
-        st.session_state.current_scene_prompt = ""
-        st.session_state.video_prompt_finalized = False # 초기화 시 다시 False로 설정
-        st.rerun()
+                st.markdown("---") # 구분선 추가
+                st.info(f"👍 {encouragement_message}") # 깔끔한 정보 박스에 격려 메시지
+                st.markdown("---")
+                st.markdown("⬆️ 이 프롬프트가 마음에 든다면 **'장면 완성!'** 이라고 말해주세요. 혹시 수정하고 싶은 부분이 있다면 어떤 점이 마음에 들지 않는지 구체적으로 설명해주세요.")
+                # --- ✨ 디자인 개선 핵심 코드 끝 ✨ ---
+
+            # 기존 종료 조건도 함께 유지하여 유연성 확보 (혹시 모를 GPT의 출력 변화 대비)
+            # 이 조건이 최종 프롬프트 출력 형식이 아닐 경우 video_prompt_finalized는 여전히 False여야 함
+            elif "최종 프롬프트:" in last_gpt_message or \
+                 "이 프롬프트로 멋진 영상을 만들 수 있을 거예요!" in last_gpt_message:
+                # 새 형식으로 출력되지 않았다면, 예전 방식대로 처리하되, video_prompt_finalized를 True로 설정하여 대화 종료 유도
+                if "✨ **완성된 영상 프롬프트 (한국어):**" not in last_gpt_message: 
+                    st.session_state.video_prompt_finalized = True
+                    st.success("✅ 영상 프롬프트 점검이 완료되었습니다!")
+                    # 기존 GPT 메시지 내용을 그대로 표시 (깔끔하게 파싱하지 못했으므로)
+                    with st.chat_message("assistant"):
+                        st.markdown(last_gpt_message)
