@@ -479,8 +479,8 @@ elif chat_option.startswith("4"):
 
     st.warning("이 기능은 '2. 이야기 나누기'에서 장면 구분이 완료된 후에 사용하는 것이 좋습니다.")
 
-    # '장면별 영상 Prompt 점검'의 시스템 프롬프트 정의 (최종 수정본)
-    VIDEO_PROMPT_REVIEW_SYSTEM_PROMPT = ( # 변수명 통일성을 위해 추가
+    # '장면별 영상 Prompt 점검'의 시스템 프롬프트 정의 (최종본)
+    VIDEO_PROMPT_REVIEW_SYSTEM_PROMPT = (
         GLOBAL_GPT_DIRECTIVES +
         """너는 초등학생이 작성한 장면 설명을 기반으로, **10초 이내의 영상으로 구성 가능한지 확인**하고 Pika AI가 멋진 영상을 만들 수 있도록 프롬프트를 구체적이고 생생하게 개선해주는 GPT 도우미야. 너의 목표는 학생의 아이디어를 Pika에 최적화된 시각적인 프롬프트로 변환하는 것이야. **컴퓨터는 '푸근한 아줌마'처럼 모호한 표현을 이해하기 어렵다는 것을 학생들이 잘 모른다는 점을 항상 기억하고, 이를 구체적인 시각적 묘사로 바꾸도록 적극적으로 도와줘.**
 
@@ -530,10 +530,24 @@ elif chat_option.startswith("4"):
             {"role": "system", "content": VIDEO_PROMPT_REVIEW_SYSTEM_PROMPT}
         ]
         st.session_state.current_scene_prompt = ""
-        st.session_state.video_prompt_finalized = False # 대화 시작 시 항상 False로 설정
+        st.session_state.video_prompt_finalized = False 
 
-    scene_summary = st.text_input("장면 요약을 입력하세요 (예: '주인공이 마법의 숲에 도착하는 장면')", key="scene_summary_input")
-    user_prompt_draft = st.text_area("이 장면에 대한 Pika 영상 프롬프트 초안을 작성하세요.", key="video_prompt_draft_input", value=st.session_state.current_scene_prompt)
+    # --- 입력 칸 구분 명확화 코드 시작 ---
+    st.subheader("1단계: 이 장면은 어떤 내용인가요?")
+    scene_summary = st.text_input(
+        "**이 장면을 한 문장으로 요약해주세요.** (예: 주인공이 마법의 숲에 도착하는 장면)", 
+        key="scene_summary_input",
+        placeholder="예: 주인공이 마법의 숲에 도착하는 장면"
+    )
+
+    st.subheader("2단계: 영상 프롬프트 초안을 작성해주세요.")
+    user_prompt_draft = st.text_area(
+        "**이 장면을 Pika AI 영상으로 만들려면 어떻게 표현할까요?** (구체적으로 작성해보세요!)", 
+        key="video_prompt_draft_input", 
+        value=st.session_state.current_scene_prompt,
+        placeholder="예: 소녀가 신비로운 숲길을 걷는 모습. 나뭇잎 사이로 햇살이 비치고 작은 요정들이 주변을 날아다님."
+    )
+    # --- 입력 칸 구분 명확화 코드 끝 ---
 
     if st.button("프롬프트 점검 시작") and scene_summary and user_prompt_draft:
         st.session_state.current_scene_prompt = user_prompt_draft
@@ -558,7 +572,7 @@ elif chat_option.startswith("4"):
                 st.session_state.messages_video_prompt.append({"role": "assistant", "content": gpt_response})
             st.rerun()
 
-         # GPT가 최종 프롬프트를 제시했는지 확인 (파싱 로직)
+        # GPT가 최종 프롬프트를 제시했는지 확인 (파싱 로직)
         if st.session_state.messages_video_prompt and \
            st.session_state.messages_video_prompt[-1]["role"] == "assistant":
             last_gpt_message = st.session_state.messages_video_prompt[-1]["content"]
@@ -574,44 +588,46 @@ elif chat_option.startswith("4"):
 
                 # 영어 프롬프트 추출
                 start_english_index = last_gpt_message.find("🎬 **Pika AI용 영어 프롬프트:**") + len("🎬 **Pika AI용 영어 프롬프트:**")
-                # 마지막 격려 문구 전까지 추출 (정확한 시작과 끝을 찾아야 합니다)
-                # '이제 이 프롬프트로' 이전 부분을 찾도록 수정
                 end_english_index = last_gpt_message.find("이제 이 프롬프트로", start_english_index)
                 if end_english_index != -1:
                     english_final_prompt = last_gpt_message[start_english_index:end_english_index].strip()
                 else:
-                    english_final_prompt = last_gpt_message[start_english_index:].strip() # 격려 문구가 없을 경우 끝까지
+                    english_final_prompt = last_gpt_message[start_english_index:].strip()
 
-                # 격려 메시지 추출 (선택 사항: GPT가 보내는 격려 메시지도 추출하여 깔끔하게 표시)
+                # 격려 메시지 추출
                 encouragement_message = ""
                 encouragement_start_index = last_gpt_message.find("이제 이 프롬프트로", end_english_index if end_english_index != -1 else start_english_index)
                 if encouragement_start_index != -1:
                     encouragement_message = last_gpt_message[encouragement_start_index:].strip()
 
-                st.session_state.video_prompt_finalized = True # 최종 프롬프트 출력 시 플래그를 True로 설정
-                
-                # --- ✨ 여기부터 디자인 개선 핵심 코드 ✨ ---
-                st.success("🎉 영상 프롬프트 점검이 완료되었어요! 🎉")
-                st.markdown("---") # 구분선 추가
+                st.success("✅ GPT가 새로운 프롬프트 초안을 제안했어요! 마음에 드나요?")
+                st.markdown("---") 
 
                 st.subheader("💡 완성된 영상 프롬프트")
                 st.write(f"**한국어:** {korean_final_prompt}")
                 st.markdown(f"**Pika AI용 영어:** ```{english_final_prompt}```") # 코드 블록으로 강조
 
-                st.markdown("---") # 구분선 추가
-                st.info(f"👍 {encouragement_message}") # 깔끔한 정보 박스에 격려 메시지
+                st.markdown("---") 
+                st.info(f"👍 {encouragement_message}")
                 st.markdown("---")
                 st.markdown("⬆️ 이 프롬프트가 마음에 든다면 **'장면 완성!'** 이라고 말해주세요. 혹시 수정하고 싶은 부분이 있다면 어떤 점이 마음에 들지 않는지 구체적으로 설명해주세요.")
-                # --- ✨ 디자인 개선 핵심 코드 끝 ✨ ---
-
-            # 기존 종료 조건도 함께 유지하여 유연성 확보 (혹시 모를 GPT의 출력 변화 대비)
-            # 이 조건이 최종 프롬프트 출력 형식이 아닐 경우 video_prompt_finalized는 여전히 False여야 함
+                
+            # 기존 종료 조건도 함께 유지 (이전 형식의 최종 프롬프트가 혹시 출력될 경우를 대비)
             elif "최종 프롬프트:" in last_gpt_message or \
                  "이 프롬프트로 멋진 영상을 만들 수 있을 거예요!" in last_gpt_message:
-                # 새 형식으로 출력되지 않았다면, 예전 방식대로 처리하되, video_prompt_finalized를 True로 설정하여 대화 종료 유도
-                if "✨ **완성된 영상 프롬프트 (한국어):**" not in last_gpt_message: 
-                    st.session_state.video_prompt_finalized = True
-                    st.success("✅ 영상 프롬프트 점검이 완료되었습니다!")
-                    # 기존 GPT 메시지 내용을 그대로 표시 (깔끔하게 파싱하지 못했으므로)
+                if "✨ **완성된 영상 프롬프트 (한국어):**" not in last_gpt_message:
+                    st.success("✅ 영상 프롬프트 점검이 완료되었습니다! (이전 형식)")
                     with st.chat_message("assistant"):
                         st.markdown(last_gpt_message)
+                    st.info("⬆️ 이 프롬프트가 마음에 든다면 **'장면 완성!'** 이라고 말해주세요. 혹시 수정하고 싶은 부분이 있다면 어떤 점이 마음에 들지 않는지 구체적으로 설명해주세요.")
+                    # 이전 형식일 경우에도 대화는 계속되도록 video_prompt_finalized는 False 유지
+                    # st.session_state.video_prompt_finalized = False # <-- 이 줄은 불필요. 기본값이 False이므로.
+
+
+    if st.button("프롬프트 점검 초기화", key="reset_video_prompt_chat"):
+        st.session_state.messages_video_prompt = [
+            {"role": "system", "content": VIDEO_PROMPT_REVIEW_SYSTEM_PROMPT}
+        ]
+        st.session_state.current_scene_prompt = ""
+        st.session_state.video_prompt_finalized = False 
+        st.rerun()
